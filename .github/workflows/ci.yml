@@ -1,0 +1,106 @@
+name: CI
+on:
+  push:
+    branches: 
+      - main
+    paths-ignore:
+      - README.md
+  pull_request:
+    paths-ignore:
+      - README.md
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build:unpack
+      - name: Download lib
+        run: npm run download-lib
+      - name: Create ZIP archive
+        run: Compress-Archive -Path "dist/win-unpacked/*" -DestinationPath "dist/webgal-apk-build-tool-windows.zip"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webgal-apk-build-tool-windows
+          path: dist/webgal-apk-build-tool-windows.zip
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build:unpack
+      - name: Download lib
+        run: npm run download-lib
+      - name: Create ZIP archive
+        run: zip -r dist/webgal-apk-build-tool-linux.zip dist/linux-unpacked
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webgal-apk-build-tool-linux
+          path: dist/webgal-apk-build-tool-linux.zip
+
+  release:
+    name: Release
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs:
+      - build-windows
+      - build-linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Get version
+        id: yq
+        uses: mikefarah/yq@master
+        with:
+          cmd: yq -r .version package.json
+      - name: Prepare tag name
+        id: tag_name
+        run: |
+          VERSION="${{ steps.yq.outputs.result }}"
+          TAG_NAME="v${VERSION}"
+          echo "TAG_NAME=$TAG_NAME" >> "$GITHUB_OUTPUT"
+      - name: Check tag
+        uses: mukunku/tag-exists-action@v1.6.0
+        id: check-tag
+        with:
+          tag: ${{ steps.tag_name.outputs.TAG_NAME }}
+      - name: Download artifact
+        if: steps.check-tag.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Release
+        if: steps.check-tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag_name.outputs.TAG_NAME }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/webgal-apk-build-tool-windows.zip
+            artifacts/webgal-apk-build-tool-linux.zip
