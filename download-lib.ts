@@ -62,7 +62,19 @@ const downloadJDK = async (destDir: string, platform: Platform): Promise<void> =
 }
 
 const downloadBuildTools = async (destDir: string, platform: Platform): Promise<void> => {
-  const buildToolsUrl = `https://dl.google.com/android/repository/build-tools_r36_${platform}.zip`
+  const platformInUrl = (()=>{
+    switch (platform) {
+      case 'windows':
+        return 'windows'
+      case 'mac':
+        return 'macosx'
+      case 'linux':
+        return 'linux'
+      default:
+        return 'windows'
+    }
+  })()
+  const buildToolsUrl = `https://dl.google.com/android/repository/build-tools_r36_${platformInUrl}.zip`
   const buildToolsFileName = 'build-tools.zip'
   const buildToolsDestPath = path.join(destDir, buildToolsFileName)
 
